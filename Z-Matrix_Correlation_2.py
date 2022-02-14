@@ -84,3 +84,19 @@ for i in ["i", "B", "A", "T"]:
             zMatrix[i][j] = AllEdges[zMatrix[i][j]-1]
 
 print (zMatrix)
+## Generate a list of the above DoFs
+DofIndices = []
+##  Add Bonds   ##
+for i in range(zMatrix.shape[0]):
+    if (zMatrix["B"][i] is not None):
+        DofIndices.append([zMatrix["i"][i],zMatrix["B"][i]])
+    if (zMatrix["A"][i] is not None):
+        DofIndices.append([zMatrix["i"][i],zMatrix["B"][i], zMatrix["A"][i]])
+    if (zMatrix["T"][i] is not None):
+        DofIndices.append([zMatrix["i"][i],zMatrix["B"][i], zMatrix["A"][i], zMatrix["T"][i]])
+
+print (DofIndices)
+
+
+## Generate an array, of shape (N_Frames,3N-6)  ##
+#DoFs = np.array(TrajIn.n_frames, 3*(TrajIn.n_atoms)-6)
