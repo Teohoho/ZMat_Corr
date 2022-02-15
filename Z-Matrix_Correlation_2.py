@@ -10,18 +10,25 @@ print (TrajIn)
 bondgraph = TrajIn.topology.to_bondgraph()
 bond_Adjacency = bondgraph.adj
 
+##  Make dict of indices    ##
+keylist = list(bondgraph.adj.keys())
+bond_Adjacency = {}
+for i in range(len(keylist)):
+    atomList = list(bondgraph.adj[keylist[i]].keys())
+    bond_Adjacency[i] = [x.index for x in atomList]
+
 ## Number the atoms ##
 SingleEdge = {}
 MultipEdge = {}
 
 counter = 0
 for AtomIx in range(TrajIn.n_atoms):
-    if (len(bond_Adjacency[TrajIn.topology.atom(AtomIx)]) > 1):
+    if (len(bond_Adjacency[AtomIx]) > 1):
         MultipEdge[counter] = AtomIx
         counter += 1
         #print ("Bing!")
 for AtomIx in range(TrajIn.n_atoms):
-    if (len(bond_Adjacency[TrajIn.topology.atom(AtomIx)]) == 1):
+    if (len(bond_Adjacency[AtomIx]) == 1):
         SingleEdge[counter] = AtomIx
         counter += 1
         #print ("Bong!")
@@ -41,15 +48,15 @@ for AtomIx in range(3, len(MultipEdge)):
     print (TrajIn.topology.atom(MultipEdge[AtomIx]))
     zMatrix["i"][AtomIx] = AtomIx + 1
     for j in range(AtomIx-1, -1, -1):
-        if (TrajIn.topology.atom(MultipEdge[j]) in bond_Adjacency[TrajIn.topology.atom(MultipEdge[AtomIx])]):
+        if (MultipEdge[j] in bond_Adjacency[AtomIx]):
             zMatrix["B"][AtomIx] = j+1
             break
     for k in range(j-1, -1, -1):
-        if (TrajIn.topology.atom(MultipEdge[k]) in bond_Adjacency[TrajIn.topology.atom(MultipEdge[j])]):
+        if (MultipEdge[k] in bond_Adjacency[MultipEdge[j]]):
             zMatrix["A"][AtomIx] = k+1
             break
     for l in range(k-1, -1, -1):
-        if (TrajIn.topology.atom(MultipEdge[l]) in bond_Adjacency[TrajIn.topology.atom(MultipEdge[k])]):
+        if ((MultipEdge[l]) in bond_Adjacency[MultipEdge[k]]):
             zMatrix["T"][AtomIx] = l+1
             break
 MultipleAtomIx = AtomIx
@@ -58,9 +65,9 @@ MultipleAtomIx = AtomIx
 for AtomIx in range(len(SingleEdge)):
     currAtom = AtomIx + MultipleAtomIx + 1
 
-    if (TrajIn.topology.atom(MultipEdge[0]) in list(bond_Adjacency[TrajIn.topology.atom(SingleEdge[currAtom])])):
+    if (MultipEdge[0] in bond_Adjacency[SingleEdge[currAtom]]):
         zMatrix.loc[currAtom] = [currAtom+1, 1, 2, 3]
-    elif (TrajIn.topology.atom(MultipEdge[1]) in list(bond_Adjacency[TrajIn.topology.atom(SingleEdge[currAtom])])):
+    elif (MultipEdge[1] in bond_Adjacency[SingleEdge[currAtom]]):
         zMatrix.loc[currAtom] = [currAtom + 1, 2, 3, 4]
     else:
         #neighbor = MultipEdge_val.index(list(bond_Adjacency[TrajIn.topology.atom(SingleEdge[currAtom])])[0].index)
@@ -84,18 +91,26 @@ for i in ["i", "B", "A", "T"]:
             zMatrix[i][j] = AllEdges[zMatrix[i][j]-1]
 
 print (zMatrix)
-## Generate a list of the above DoFs
-DofIndices = []
-##  Add Bonds   ##
-for i in range(zMatrix.shape[0]):
-    if (zMatrix["B"][i] is not None):
-        DofIndices.append([zMatrix["i"][i],zMatrix["B"][i]])
-    if (zMatrix["A"][i] is not None):
-        DofIndices.append([zMatrix["i"][i],zMatrix["B"][i], zMatrix["A"][i]])
-    if (zMatrix["T"][i] is not None):
-        DofIndices.append([zMatrix["i"][i],zMatrix["B"][i], zMatrix["A"][i], zMatrix["T"][i]])
+zMatrix_np = zMatrix.to_numpy()
+levels = np.zeros(TrajIn.n_atoms)
 
-print (DofIndices)
+for lineIx in range(1, zMatrix_np.shape[0]):
+    print (zMatrix_np[lineIx])
+    levels[zMatrix_np[lineIx][0]] = levels[zMatrix_np[lineIx][1]] + 1
+
+pass
+## Generate a list of the above DoFs
+# DofIndices = []
+# ##  Add Bonds   ##
+# for i in range(zMatrix.shape[0]):
+#     if (zMatrix["B"][i] is not None):
+#         DofIndices.append([zMatrix["i"][i],zMatrix["B"][i]])
+#     if (zMatrix["A"][i] is not None):
+#         DofIndices.append([zMatrix["i"][i],zMatrix["B"][i], zMatrix["A"][i]])
+#     if (zMatrix["T"][i] is not None):
+#         DofIndices.append([zMatrix["i"][i],zMatrix["B"][i], zMatrix["A"][i], zMatrix["T"][i]])
+#
+# print (DofIndices)
 
 
 ## Generate an array, of shape (N_Frames,3N-6)  ##
