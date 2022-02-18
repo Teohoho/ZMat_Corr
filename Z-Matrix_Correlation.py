@@ -2,12 +2,16 @@ import mdtraj as md
 import sys
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.cluster.hierarchy as sch
 
 ## LOAD TRAJECTORY ##
-OutFN = ["./ala1_DoFs.csv"]
+OutFN = ["./ala1_DoFs.csv", "./ala1_DoFs_corr.csv"]
 OutFlex = "./ala1.flex"
 TrajIn = md.load("ala1/ala1_Prod_Restraint_Global.dcd",
                  top="ala1/ala1.prmtop")
+#TrajIn = md.load("ala1BAT/ligand.dcd",
+#                 top="ala1BAT/ligand.prmtop")
 print(TrajIn)
 bondgraph = TrajIn.topology.to_bondgraph()
 
@@ -29,7 +33,6 @@ for node in bond_Adjacency:
         for neighbor in bond_Adjacency[node]:
             if (levels[neighbor] is not None):
                 levels[node] = levels[neighbor] + 1
-#print("Levels: {}".format(levels))
 
 ## BONDS INDICES GET ##
 bonds_redundant = []
@@ -46,7 +49,7 @@ for ix in range(len(bonds_redundant)):
     if repeat == 0:
         bonds_nonRedundant.append(bonds_redundant[ix])
 ## BONDS INDICES END ##
-
+print (bonds_nonRedundant)
 print("{} bonds found!".format(len(bonds_nonRedundant)))
 
 ## BOND LENGTHS GET ##
@@ -61,6 +64,16 @@ for node in bond_Adjacency:
             for secondNeighbor in bond_Adjacency[firstNeighbor]:
                 if (secondNeighbor != node):
                     angles_redundant.append([node, firstNeighbor, secondNeighbor])
+
+##  Get all angle values    ##
+all_angles = []
+for ix in range(len(angles_redundant)):
+    currentAngle = angles_redundant[ix]
+    if (angles_redundant[ix][0] < angles_redundant[ix][2]):
+        currentAngle.reverse()
+    if currentAngle not in all_angles:
+        all_angles.append(currentAngle)
+##  Get Z-Matrix angle values    ##
 angles_nonRedundant = []
 for ix in range(len(angles_redundant)):
     repeat = 0
@@ -73,17 +86,15 @@ for ix in range(len(angles_redundant)):
             repeat = 1
             break
     if (repeat == 0):
-        #print (levels[angles_redundant[ix][0]])
-        #print (levels[angles_redundant[ix][2]])
         if (levels[angles_redundant[ix][0]] > levels[angles_redundant[ix][2]]):
             angles_nonRedundant.append(angles_redundant[ix])
 ## ANGLES INDICES END ##
 print("{} angles found!".format(len(angles_nonRedundant)))
 
 ## ANGLE VALUES GET ##
+all_angles_values = md.compute_angles(TrajIn, all_angles)
 angles_values = md.compute_angles(TrajIn, angles_nonRedundant)
 ## ANGLE VALUES END ##
-
 
 ## DIHEDRALS INDICES GET ##
 dihedrals_redundant = []
@@ -97,7 +108,16 @@ for node in bond_Adjacency:
                             if (thirdNeighbor != firstNeighbor):
                                 dihedrals_redundant.append([node, firstNeighbor,
                                                             secondNeighbor, thirdNeighbor])
-                                # print([node.index, firstNeighbor.index, secondNeighbor.index, thirdNeighbor.index])
+
+all_dihedrals = []
+for ix in range(len(dihedrals_redundant)):
+    currentDihedral = dihedrals_redundant[ix]
+    if (dihedrals_redundant[ix][0] < dihedrals_redundant[ix][3]):
+        currentDihedral.reverse()
+    if currentDihedral not in all_dihedrals:
+        all_dihedrals.append(currentDihedral)
+all_dihedrals = sorted(all_dihedrals)
+print (all_dihedrals)
 
 dihedrals_nonRedundant = []
 for ix in range(len(dihedrals_redundant)):
@@ -105,9 +125,12 @@ for ix in range(len(dihedrals_redundant)):
     if (levels[dihedrals_redundant[ix][0]] > levels[dihedrals_redundant[ix][2]] and
         levels[dihedrals_redundant[ix][1]] > levels[dihedrals_redundant[ix][3]]):
         dihedrals_nonRedundant.append(dihedrals_redundant[ix])
+print (dihedrals_nonRedundant)
+
 ## DIHEDRALS INDICES END ##
 
 ## DIHEDRALS VALUES GET ##
+all_dihedrals_values = md.compute_dihedrals(TrajIn, all_dihedrals)
 dihedrals_values = md.compute_dihedrals(TrajIn, dihedrals_nonRedundant)
 ## DIHEDRALS VALUES END ##
 
@@ -115,23 +138,68 @@ print("{} dihedrals found!".format(len(dihedrals_nonRedundant)))
 
 ## ALL DoFs CONCATENATED GET ##
 All_DoFs = np.vstack((np.vstack((bonds_distances.T, angles_values.T)), dihedrals_values.T))
+All_DoFs2 = np.vstack((np.vstack((bonds_distances.T, all_angles_values.T)), all_dihedrals_values.T))
+print (All_DoFs2)
+## SAVE BAT COORDINATES ##
+All_DoFs = pd.DataFrame(All_DoFs2,
+                        index=[str(x) for x in bonds_nonRedundant + all_angles + all_dihedrals],
+                        columns=["Frame {}".format(x) for x in range(TrajIn.n_frames)])
+All_DoFs.to_csv(OutFN[0], sep=",", float_format="%5.3f")
+
 # print (All_DoFs)
 # print (All_DoFs.shape)
 # sys.exit()
 All_DoFs_Correlation = np.corrcoef(All_DoFs)
-## Generate string indices for bonds/angles/dihedrals
-bonds_nonRedundant_str = [str(x) for x in bonds_nonRedundant]
-angles_nonRedundant_str = [str(x) for x in angles_nonRedundant]
-dihedrals_nonRedundant_str = [str(x) for x in dihedrals_nonRedundant]
-# for i in range(len(bonds_nonRedundant)):
-#     bonds_nonRedundant[i] = str(bonds_nonRedundant[i])
-# for i in range(len(angles_nonRedundant)):
-#     angles_nonRedundant[i] = str(angles_nonRedundant[i])
-# for i in range(len(dihedrals_nonRedundant)):
-#     dihedrals_nonRedundant[i] = str(dihedrals_nonRedundant[i])
+##Plot Correlation Heatmap  ##
+heatmap = plt.imshow(All_DoFs_Correlation, vmin=0, vmax=1)
+colormap = plt.colorbar(heatmap)
+#plt.show()
+
+
+
+##Cluster Correlations  ##
+FClusterCutoff = 2
+Z = sch.linkage(All_DoFs_Correlation, method='weighted')
+flatClusts = sch.fcluster(Z, FClusterCutoff, criterion='distance')
+flatClusts = np.array(flatClusts)
+listOfClusters = set()
+for a in range(flatClusts.shape[0]):
+    listOfClusters.add(flatClusts[a])
+ClusterNumber = len(listOfClusters)
+print("Number of Clusters: " + str(len(listOfClusters)))
+framesInClust = len(listOfClusters) * [None]
+for j in range(len(listOfClusters)):
+    print("In cluster " + str(j + 1) + " are the following frames: ", end='')
+    framesInClust[j] = []
+    for i in range(flatClusts.shape[0]):
+        if (flatClusts[i] == list(listOfClusters)[j]):
+            print(i, end=", ")
+            framesInClust[j].append(i)
+    print()
+
+# Iterate through clusters
+mins = np.empty((len(framesInClust)), dtype=int)
+for clustIx in range(len(framesInClust)):
+    # Iterate through frames matrix
+    distM = np.empty((len(framesInClust[clustIx]), len(framesInClust[clustIx])))
+    for Ix in range(len(framesInClust[clustIx])):
+        for Jx in range(len(framesInClust[clustIx])):
+            i = framesInClust[clustIx][Ix]
+            j = framesInClust[clustIx][Jx]
+            distM[Ix][Jx] = All_DoFs_Correlation[i][j]
+    # Teodor score
+    avgs = [np.mean(distM[i]) for i in range(distM.shape[0])]
+    mins[clustIx] = framesInClust[clustIx][np.argmin(avgs)]
+print ("The min of each cluster, RMSD-wise:")
+print (mins)
+
+sys.exit()
+
+
+print("Number of Clusters: " + str(len(listOfClusters)))
 
 DoFsIndices_list = bonds_nonRedundant + angles_nonRedundant + dihedrals_nonRedundant
-DoFsIndices = bonds_nonRedundant_str + angles_nonRedundant_str + dihedrals_nonRedundant_str
+DoFsIndices = [str(x) for x in bonds_nonRedundant + all_angles + all_dihedrals]
 # print (DoFsIndices)
 All_DoFs_Correlation = pd.DataFrame(All_DoFs_Correlation, index=DoFsIndices, columns=DoFsIndices)
 ## ALL DoFs CONCATENATED END ##
@@ -141,16 +209,12 @@ All_DoFs = pd.DataFrame(All_DoFs[:, 0],
                         index=DoFsIndices,
                         columns=["Value"])
 
-## SAVE DoF Values to CSV
-# All_DoFs.to_csv(OutFN[0], sep="\t")
-# print ("DoF file (for frame 0) saved: {}".format(OutFN[0]))
-
-## Since we're looking for corellated motion, we discard the sign
+## Since we're looking for correlated motion, we discard the sign
 ## of the covariance; i.e. a covariance of -1 is taken into account
 ## as much as a covariance of 1
 All_DoFs_Correlation = np.abs(All_DoFs_Correlation)
-All_DoFs_Correlation.to_csv(OutFN[0], sep=",", float_format="%5.3f")
-print("DoF correlation saved: {}".format(OutFN[0]))
+#All_DoFs_Correlation.to_csv(OutFN[0], sep=",", float_format="%5.3f")
+print("DoF correlation saved: {}".format(OutFN[1]))
 
 ## Normalize the Covariance Distribution
 # CovarMin = np.min(All_DoFs_Correlation)
